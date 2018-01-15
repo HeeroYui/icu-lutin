@@ -45,14 +45,63 @@ list_of_flags_default = {
     "link":[],
    }
 
+depend_transcript = {}
+
 def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependency, comilator_version, binary=False):
 	if binary == False:
 		pass
+	basic_name = copy.deepcopy(lib_name)
 	tmp_base = "lib" + global_lib_name + "_"
 	if     len(lib_name) > len(tmp_base)\
 	   and lib_name[:len(tmp_base)] == tmp_base:
 		lib_name = lib_name[len(tmp_base):]
 	list_of_library_generated.append(lib_name.replace("_","-"))
+	test_unit = False
+	sample = False
+	tools = False
+	##print("check lib name : '" + lib_name + "'")
+	if lib_name.find("test") != -1:
+		##print("    ==> test")
+		test_unit = True
+	if lib_name.find("sample") != -1:
+		##print("    ==> sample")
+		sample = True
+	if lib_name.find("tool") != -1:
+		##print("    ==> tools")
+		tools = True
+	for elem in list_of_files:
+		if elem.find("test") != -1:
+			##print("    ==> test 2")
+			test_unit = True
+		elif elem.find("sample") != -1:
+			##print("    ==> sample 2")
+			sample = True
+	lib_name = lib_name.replace(global_lib_name, "")
+	if test_unit == True:
+		lib_name = lib_name.replace("tests", "")
+		lib_name = lib_name.replace("test", "")
+		if lib_name == "":
+			lib_name = global_lib_name + "-test"
+		else:
+			lib_name = global_lib_name + "-test-" + lib_name
+	elif sample == True:
+		lib_name = lib_name.replace("samples", "")
+		lib_name = lib_name.replace("sample", "")
+		if lib_name == "":
+			lib_name = global_lib_name + "-sample"
+		else:
+			lib_name = global_lib_name + "-sample-" + lib_name
+	elif tools == True:
+		lib_name = lib_name.replace("tools", "")
+		lib_name = lib_name.replace("tool", "")
+		if lib_name == "":
+			lib_name = global_lib_name + "-tools"
+		else:
+			lib_name = global_lib_name + "-tools-" + lib_name
+	else:
+		lib_name = global_lib_name + "-" + lib_name
+	##print("                     new name: '" + lib_name + "'")
+	depend_transcript[basic_name] = lib_name
 	# remove all unneeded element flags:
 	#-I
 	list_of_include = copy.deepcopy(list_of_flags_default)
@@ -63,7 +112,7 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 	#print("list of flags: ")
 	for type in ["c", "c++", "S", "link"]:
 		for elem in list_of_flags[type]:
-			if elem in ["-m64", "-O3", "-O2", "-O1", "-O0", "-fPIC"]:
+			if elem in ["-m64", "-o3", "-o2", "-o1", "-o0", "-O3", "-O2", "-O1", "-O0", "-fPIC"]:
 				continue
 			if elem == "-pthread":
 				if "pthread" not in tmp_dependency_list:
@@ -120,9 +169,17 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 		out += "	return \"LIBRARY\"\n"
 	else:
 		out += "	return \"BINARY\"\n"
+		out += "\n"
+		if test_unit == True:
+			out += "def get_sub_type():\n"
+			out += "	return 'TEST'\n"
+		elif sample == True:
+			out += "def get_sub_type():\n"
+			out += "	return 'SAMPLE'\n"
 	out += "\n"
 	out += "def get_desc():\n"
-	out += "	return \"" + global_lib_name + ":" + lib_name.replace("_","-") + " library\"\n"
+	#out += "	return \"" + global_lib_name + ":" + lib_name.replace("_","-") + " library\"\n"
+	out += "	return \"" + lib_name.replace("_","-") + " library\"\n"
 	out += "\n"
 	out += "#def get_licence():\n"
 	out += "#	return \"UNKNOW\"\n"
@@ -140,11 +197,27 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 	out += "	return \"version.txt\"\n"
 	out += "\n"
 	out += "def configure(target, my_module):\n"
+	list_dir = []
 	if len(list_of_files) != 0:
 		out += "	my_module.add_src_file([\n"
 		for item in list_of_files:
-			out += "	    '" + global_lib_name + "/" + item +"',\n"
+			if os.path.dirname(item) not in list_dir:
+				list_dir.append(os.path.dirname(item))
+			#out += "	    '" + global_lib_name + "/" + item +"',\n"
+			out += "	    '" + item +"',\n"
 		out += "	    ])\n"
+		out += "	\n"
+	
+	if len(list_dir) != 0:
+		out += "	my_module.add_header_file([\n"
+		for elem in list_dir:
+			out += "	    '" + elem + "/*.hpp',\n"
+			out += "	    '" + elem + "/*.hxx',\n"
+			out += "	    '" + elem + "/*.h',\n"
+			out += "	    '" + elem + "/*.H',\n"
+		#out += "	    recursive=True,\n"
+		#out += "	    destination_path='" + global_lib_name + "')\n"
+		out += "	    ], clip_path='" + global_lib_name + "')\n"
 		out += "	\n"
 	
 	for type in ["c", "c++", "S", "link"]:
@@ -160,7 +233,7 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 			out += "	    ])\n"
 			out += "	\n"
 	out += "	\n"
-	for type in ["c", "c++", "S", "link"]:
+	for type in ["c", "c++", "S"]: # NO LINK
 		if len(list_of_other[type]) != 0:
 			out += "	my_module.add_flag('" + type + "', [\n"
 			for item in list_of_other[type]:
@@ -185,7 +258,7 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 		if comilator_version[type] != []:
 			year = 1990
 			gnu = "False"
-			print("check : " + comilator_version[type])
+			## print("check : " + comilator_version[type])
 			if comilator_version[type] in ["c90"]:
 				year = 1990
 				gnu = "False"
@@ -237,12 +310,15 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 			out += "	my_module.compile_version('" + type + "', " + str(year) + ", gnu=" + gnu + ")\n"
 			
 	out += "	my_module.add_depend([\n"
-	out += "	    'z',\n"
-	out += "	    'm',\n"
-	#out += "	    'cxx',\n"
+	#out += "	    'z',\n"
+	#out += "	    'm',\n"
+	out += "	    'cxx',\n"
 	#out += "	    '" + global_lib_name + "-include',\n"
 	for item in list_of_dependency:
-		out += "	    '" + item +"',\n"
+		if item in depend_transcript:
+			out += "	    '" + depend_transcript[item] +"',\n"
+		else:
+			out += "	    '" + item +"',\n"
 	out += "	    ])\n"
 	out += "	return True\n"
 	out += "\n"
@@ -347,7 +423,7 @@ with open(build_output_file) as commit:
 		   and line[-6:-2] == ".cpp":
 			print("element : " + line)
 		"""
-		print("-----------------------------------------------------------------------------")
+		## print("-----------------------------------------------------------------------------")
 		m = re.search('^.*Entering directory \'(.*)\'$', line)
 		if m != None:
 			if len(m.groups()) == 1:
@@ -357,9 +433,11 @@ with open(build_output_file) as commit:
 					current_path = current_path[len(os.getcwd())+1:]
 				#print("change directory: '" + current_path + "'")
 			continue
-		m = re.search('^(/usr/bin/)?(cc|gcc|g\+\+|clang\+\+|clang)(.*)$',line) #(([a-zA-Z0-9_\-]*)\.(cpp|c|cxx|S|s))$', line)
+		
+		m = re.search('^(/usr/bin/|pkgdata: )?(cc|gcc|g\+\+|clang\+\+|clang)(.*)$',line) #(([a-zA-Z0-9_\-]*)\.(cpp|c|cxx|S|s))$', line)
 		if m != None:
 			if len(m.groups()) != 3:
+				print("  reject: " + line);
 				continue
 			#print("CMD : " + line[:-1])
 			list_elem = m.groups()[2].split(" ");
@@ -375,6 +453,7 @@ with open(build_output_file) as commit:
 			remove_next = False
 			tmp_std_selected = copy.deepcopy(list_of_flags_default)
 			tmp_tmp_std_selected = ""
+			##print ("                    " + list_elem[-1])
 			for elem_id in range(0, len(list_elem)):
 				elem = list_elem[elem_id]
 				if remove_next == True:
@@ -406,7 +485,7 @@ with open(build_output_file) as commit:
 					#m = re.search('^.*/(lib.*\.so)(\.[0-9]+)*$', elem_out)
 					if m != None:
 						tmp_library_shared_name = elem_out.split("lib")[-1].split(".so")[0]
-						print("link element(so):  " + tmp_library_shared_name)
+						## print("link element(so):  " + tmp_library_shared_name)
 						#for elem in m.groups():
 						#	print("     " + str(elem))
 						#print("compile element: " + os.path.join(current_path, list_elem))
@@ -414,27 +493,36 @@ with open(build_output_file) as commit:
 						continue
 					
 					tmp_binary_name = elem_out.split("bin/")[-1];
-					print("link binary:       " + tmp_binary_name)
+					## print("link binary:       " + tmp_binary_name)# + "     : " + elem_out)
+				#print( elem)
 				if     len(elem) >= 3 \
 				   and (    elem[-3:] == "cpp" \
+				         or elem[-3:] == ".cc" \
+				         or elem[-2:] == ".C" \
 				         or elem[-2:] == ".c" \
 				         or elem[-2:] == ".s" \
 				         or elem[-2:] == ".S"):
+					
 					if elem[-3:] == "cpp":
+						tmp_type = "c++"
+					elif elem[-2:] == "cc":
+						tmp_type = "c++"
+					elif elem[-2:] == ".C":
 						tmp_type = "c++"
 					elif elem[-2:] == ".c":
 						tmp_type = "c"
 					elif elem[-2:] == ".S":
 						tmp_type = "S"
+						print("oooooooooooooooooooooooooooooooooo: " + elem)
 					elif elem[-2:] == ".s":
 						tmp_type = "S"
 					tmp_compile_file = os.path.join(current_path, elem)
-					print("                 source:   " + tmp_compile_file)
+					## print("                 source:   " + tmp_compile_file)
 					continue
 				if elem[:2] == "-l":
 					if elem == "-ldl":
 						continue
-					print("              depend: " + elem[2:])
+					#print("              depend: " + elem[2:])
 					if elem[2:] not in tmp_dependency_list:
 						tmp_dependency_list.append(elem[2:])
 					continue
@@ -466,18 +554,33 @@ with open(build_output_file) as commit:
 				if elem not in list_of_flags:
 					#print("      " + flag)
 					tmp_list_of_flags.append(elem)
+			##print("  ZZZZZZZ: " + line);
 			if tmp_type == "":
 				tmp_type = "link"
 			if len(tmp_list_of_flags) != 0:
-				print("              flags:")
+				## print("              flags:")
 				for flag in tmp_list_of_flags:
 					if flag in list_of_flags[tmp_type]:
-						print("                    " + flag)
+						## print("                    " + flag)
+						pass
 					else:
-						list_of_flags[tmp_type].append(flag);
-						print("                  * " + flag)
+						if flag.find('"') != -1:
+							###print("                  * " + flag)
+							if     len(flag) >= 1 \
+							   and flag[0] == '"':
+								flag = flag[1:]
+							if     len(flag) >= 2 \
+							   and not flag[-2:] == '\\"' \
+							   and flag[-1] == '"':
+								flag = flag[:-1]
+							flag = flag.replace('\\"', '\\\\"')
+							flag = '"' + flag + '"'
+							###print("                 => " + flag)
+						if len(flag) != 0:
+							list_of_flags[tmp_type].append(flag);
+						## print("                  * " + flag)
 			if tmp_tmp_std_selected != "":
-				print("              STD type: " + tmp_tmp_std_selected)
+				## print("              STD type: " + tmp_tmp_std_selected)
 				std_selected[tmp_type] = tmp_tmp_std_selected;
 			
 			######################################
@@ -495,7 +598,7 @@ with open(build_output_file) as commit:
 					genrate_lutin_file(tmp_library_shared_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected)
 				else:
 					genrate_lutin_file(tmp_library_static_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected)
-				print("   CCCCCCCCCC clean   ")
+				## print("   CCCCCCCCCC clean   ")
 				list_of_file = []
 				list_of_flags = copy.deepcopy(list_of_flags_default)
 				std_selected = copy.deepcopy(list_of_flags_default)
