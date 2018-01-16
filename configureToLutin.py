@@ -47,7 +47,7 @@ list_of_flags_default = {
 
 depend_transcript = {}
 
-def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependency, comilator_version, binary=False):
+def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependency, comilator_version, list_include_path, binary=False):
 	if binary == False:
 		pass
 	basic_name = copy.deepcopy(lib_name)
@@ -219,6 +219,21 @@ def genrate_lutin_file(lib_name, list_of_files, list_of_flags, list_of_dependenc
 		#out += "	    destination_path='" + global_lib_name + "')\n"
 		out += "	    ], clip_path='" + global_lib_name + "')\n"
 		out += "	\n"
+	
+	if    test_unit == True \
+	   or sample == True \
+	   or True:
+		if    len(list_dir) != 0 \
+		   or len(list_include_path) != 0:
+			out += "	my_module.add_path([\n"
+			for item in list_dir:
+				out += "	    '" + item +"',\n"
+			for item in list_include_path:
+				out += "	    '" + item +"',\n"
+			out += "	    ], export=False)\n"
+			out += "	\n"
+	
+	out += "	\n"
 	
 	for type in ["c", "c++", "S", "link"]:
 		if len(list_of_define[type]) != 0:
@@ -404,6 +419,41 @@ def generate_global_module(list_of_module):
 	out += "\n"
 	file_write_data("lutin_" + global_lib_name + ".py", out);
 
+def clean_path(path_list):
+	out = []
+	need_break = False
+	while need_break == False:
+		need_break = True
+		for iii in range(0,len(path_list)):
+			elem = path_list[iii];
+			if iii == len(path_list)-1:
+				elem_next = ""
+			else:
+				elem_next = path_list[iii+1];
+			if elem_next == "..":
+				need_break = False
+				for jjj in range(iii+2,len(path_list)):
+					out.append(path_list[jjj]);
+				path_list = out
+				out = []
+				break;
+			elif elem == ".":
+				pass
+			else:
+				out.append(path_list[iii]);
+	return out
+
+def reformat_path(path):
+	list_elem = []
+	for elem in path.split("/"):
+		list_elem.append(elem.replace("/", ""));
+	tmp_elem = clean_path(list_elem);
+	out = ""
+	if path[0] == "/":
+		out = "/"
+	for elem in tmp_elem:
+		out += elem + "/"
+	return out
 
 
 with open(build_output_file) as commit:
@@ -415,6 +465,7 @@ with open(build_output_file) as commit:
 	list_of_flags = copy.deepcopy(list_of_flags_default)
 	std_selected = copy.deepcopy(list_of_flags_default)
 	current_path = os.getcwd()
+	list_include_path = []
 	# first line
 	for line in lines:
 		#print("line : " + line[-6:-2])
@@ -513,7 +564,7 @@ with open(build_output_file) as commit:
 						tmp_type = "c"
 					elif elem[-2:] == ".S":
 						tmp_type = "S"
-						print("oooooooooooooooooooooooooooooooooo: " + elem)
+						# print("oooooooooooooooooooooooooooooooooo: " + elem)
 					elif elem[-2:] == ".s":
 						tmp_type = "S"
 					tmp_compile_file = os.path.join(current_path, elem)
@@ -543,8 +594,15 @@ with open(build_output_file) as commit:
 					#print(" remove : " + elem)
 					continue;
 				if     len(elem) > 2 \
-				   and (    elem[:2] == "-L" \
-				         or elem[:2] == "-I"):
+				   and elem[:2] == "-I":
+					include_path = reformat_path(os.path.join(current_path, elem[2:]))
+					#print("requesst inclide of " + current_path + " ==> " + os.path.join(current_path, elem[2:]))
+					#print("requesst inclide of " + current_path + " ==> " + reformat_path(os.path.join(current_path, elem[2:])))
+					if include_path not in list_include_path:
+						list_include_path.append(include_path)
+					continue
+				if     len(elem) > 2 \
+				   and elem[:2] == "-L":
 					continue
 				if elem in ["-shared", "-DPIC", "fPIC"]:
 					continue
@@ -593,13 +651,14 @@ with open(build_output_file) as commit:
 			   or tmp_library_static_name != None:
 				# create new elemeent
 				if tmp_binary_name != None:
-					genrate_lutin_file(tmp_binary_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected, binary=True)
+					genrate_lutin_file(tmp_binary_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected, list_include_path, binary=True)
 				elif tmp_library_shared_name != None:
-					genrate_lutin_file(tmp_library_shared_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected)
+					genrate_lutin_file(tmp_library_shared_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected, list_include_path)
 				else:
-					genrate_lutin_file(tmp_library_static_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected)
+					genrate_lutin_file(tmp_library_static_name, list_of_file, list_of_flags, tmp_dependency_list, std_selected, list_include_path)
 				## print("   CCCCCCCCCC clean   ")
 				list_of_file = []
+				list_include_path = []
 				list_of_flags = copy.deepcopy(list_of_flags_default)
 				std_selected = copy.deepcopy(list_of_flags_default)
 				continue
@@ -689,3 +748,9 @@ generate_global_include_module()
 generate_global_module(list_of_library_generated)
 """
 
+"""
+/home/heero/dev/perso/framework/generic-library/icu-lutin/icu/source/data
+./out/Linux_x86_64/debug/staging/clang/icu-pkg/icu-pkg.app/bin/icu-pkg -d ./out/build/icudt60l --list -x \* ./in/icudt60l.dat -o out/tmp/icudata.lst
+
+./out/Linux_x86_64/debug/staging/clang/icu-pkgdata/icu-pkgdata.app/bin/icu-pkgdata -O ../data/icupkg.inc -q -c -s /home/heero/dev/perso/framework/generic-library/icu-lutin/icu/source/data/out/build/icudt60l -d ../lib -e icudt60  -T ./out/tmp -p icudt60l -m dll -r 60.2 -L icudata ./out/tmp/icudata.lst
+"""
